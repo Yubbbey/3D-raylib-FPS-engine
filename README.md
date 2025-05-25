@@ -1,66 +1,66 @@
 # 3D Raylib FPS Engine (Windows Only)
 
+A first-person sandbox engine inspired by VotV, built with C/C++ and raylib. Features PSX-style graphics, inventory, weapons, and more!
+
 ![Repo Size](https://img.shields.io/github/repo-size/Yubbbey/3D-raylib-FPS-engine?label=Repo%20Size&color=blue)
 ![Code Size](https://img.shields.io/github/languages/code-size/Yubbbey/3D-raylib-FPS-engine?label=Code%20Size&color=green)
 
 <img src="icon.png" alt="Project Icon" width="128">
 
-# C\C++ Raylib VotV-Like 3D  Game
-### Features:
-1. Easters Eggs (Maxwell, Floppa),  ✅
-2. Portals, like in Doom II,
-3. Sandbox Type-Game,
-4. Picking, launching system,
-5. 3/4 Guns,
-6. Inventory System (Maximum Weight),✅
-7. Train Station in a big map,
-8. You have to deliver packages, you can look into them and steel them,
-9. Certain packages will trigger Events (Like a killer, a bomb, or things like monsters, ghosts and more…),
-10. PSX Style , ✅
-11. Vehicles (First One is a Truck Or a Motorcycle, the last one is a big drivable drone)
-12. Human/Robot types generated voices for creepy effect. ✅
-13. NPC's,
+# Features
 
+- [x] Easter Eggs (Maxwell, Floppa)
+- [ ] Portals (like in Doom II)
+- [x] Inventory System (Maximum Weight)
+- [ ] Sandbox Type-Game
+- [ ] Picking, launching system
+- [ ] 3/4 Guns
+- [ ] Train Station in a big map
+- [ ] Package delivery, inspection, and theft
+- [ ] Event-triggering packages (killer, bomb, monsters, ghosts, etc.)
+- [x] PSX Style
+- [ ] Vehicles (Truck, Motorcycle, Drivable Drone)
+- [x] Human/Robot generated voices for creepy effect
+- [x] NPCs
 
-### Link That Can Help:
-1. https://www.youtube.com/shorts/q0gxwjBSmX4 ✅
-2. https://www.youtube.com/watch?v=TTa75ocharg  ✅
-3. https://github.com/raysan5/raylib/blob/4.2.0/examples/models✅
-4. https://github.com/madrod228/voicesoftheprinter/blob/main/The%20Pages/Page%20021.md ✅
-5. https://github.com/madrod228/voicesoftheprinter/blob/main/The%20Pages/Page%20028.md ✅
-6. https://www.raylib.com/examples/shaders/loader.html?name=shaders_basic_lighting ✅
-7. https://www.raylib.com/examples/shaders/loader.html?name=shaders_postprocessing ✅
-8. https://www.raylib.com/examples/models/loader.html?name=models_box_collisions 
-9. https://github.com/vurtun/nuklear/issues/683 ✅
-10. https://github.com/leaomartelo2/wireframe_game 
+## References & Resources
 
-### Steps:
-1. Player Controller ✅
-2. Model Loader ✅
-3. Pixelisation Shader ✅
-4. Shotgun Animation ✅
-5. Shotgun Mechanics✅
-6. Gravity ✅
-7. Other Movement Mechanics
-8. Collision (with models)
-9. Implement Features
+- [Raylib Models Examples](https://github.com/raysan5/raylib/blob/4.2.0/examples/models)
+- [Raylib Shaders Examples](https://www.raylib.com/examples/shaders/loader.html?name=shaders_basic_lighting)
+- [Nuklear UI](https://github.com/vurtun/nuklear/issues/683)
+- [Other helpful links...](#)
 
-### Prerequisites
+## Development Steps
 
-- **raylib**: Ensure that raylib is installed on your system. You can download it from the [official repository](https://github.com/raysan5/raylib).
-- **The rest is in the repository.**
+- [x] Player Controller
+- [x] Model Loader
+- [x] Pixelisation Shader
+- [x] Shotgun Animation
+- [x] Shotgun Mechanics
+- [x] Gravity
+- [ ] Other Movement Mechanics
+- [ ] Collision (with models)
+- [ ] Implement Features
 
-### Building the Project
+## Prerequisites
 
-1. Open the `compiler.bat` file to view the build commands.
-2. Ensure that the paths to raylib and other dependencies are correctly set.
-3. Run the batch file to compile the project.
-4. Running the Game
+- [raylib](https://github.com/raysan5/raylib) (install and set up for your compiler)
+- C/C++ compiler (e.g., MinGW, MSVC)
 
-After building the project:
+## Building the Project
 
-On Windows, double-click the main.exe file.
+1. Open `compiler.bat` to review the build commands.
+2. Make sure the paths to raylib and other dependencies are correct.
+3. Run `compiler.bat` to compile the project.
+
+## Running the Game
+
+After building, double-click `main.exe` on Windows or run:
 
 ```bash
 ./main
 ```
+
+## License
+
+[MIT](LICENSE)
