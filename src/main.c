@@ -33,38 +33,6 @@ void getScaledBoundingBox(BoundingBox *box, Model model, Vector3 position, Vecto
     box->min = Vector3Add(Vector3Multiply(rawBox.min, scale), position);
     box->max = Vector3Add(Vector3Multiply(rawBox.max, scale), position);
 }
-void DrawTextLetterByLetter(Font font, const char *text, int x, int y, int fontSize, float spacing, Color color, float letterDelay)
-{
-    static int charIndex = 0;
-    static float timer = 0.0f;
-    static int TextDisplayWhenEnd = 120; // Time to display the full text after the last character is drawn
-
-    timer += GetFrameTime();
-
-    // Draw the text up to the current character index
-    char temp[256] = {0}; // Adjust size as needed
-    strncpy(temp, text, charIndex);
-    temp[charIndex] = '\0';
-    if (timer >= letterDelay && charIndex < strlen(text))
-    {
-        timer -= letterDelay;
-        charIndex++;
-        DrawTextEx(font, temp, (Vector2){x, y}, fontSize, spacing, color);
-    }
-    else
-    {
-        TextDisplayWhenEnd--;
-        if (TextDisplayWhenEnd >= 0)
-        {
-            DrawTextEx(font, text, (Vector2){x, y}, fontSize, spacing, color);
-        }
-        else
-        {
-            TextDisplayWhenEnd = 0;
-        }
-    }
-    // printf("TextDisplayWhenEnd: %d\n", TextDisplayWhenEnd);
-}
 void DrawFpsEx(Font font, Vector2 position, float fontsize, float spacing)
 {
     Color color = LIME;
@@ -115,6 +83,11 @@ void SpawnBillboardEntity(Camera camera, Vector3 position, Texture2D tex, float 
         DrawBillboard(camera, tex, particlePositions[i], ObjectScale, color);
     }
 }
+void DrawTextTypeWriterFX(Font font, const char *message, int *frameCounter, int speed, float posX, float posY, float fontSize, float spacing, Color color)
+{
+    *frameCounter += speed; // Adjust the speed of the typing effect
+    DrawTextEx(font, TextSubtext(message, 0, *frameCounter / 10), (Vector2){posX, posY}, fontSize, spacing, color);
+}
 
 void CustomNuklearStyle(struct nk_context *ctx)
 {
@@ -122,7 +95,7 @@ void CustomNuklearStyle(struct nk_context *ctx)
 
     style->window.border_color = nk_rgb(180, 0, 0);
     style->window.border = 2.0f;
-    style->window.background = nk_rgb(255, 50, 50);
+    style->window.background = nk_rgb(255, 0, 0);
 
     style->button.normal = nk_style_item_color(nk_rgb(50, 50, 50));
     style->button.hover = nk_style_item_color(nk_rgb(90, 10, 10));
@@ -347,10 +320,11 @@ int main()
     SetTextureWrap(ground_texture, TEXTURE_WRAP_REPEAT);
     SetTextureFilter(ground_texture, TEXTURE_FILTER_BILINEAR);
 
-    // Create a plane ground_mesh
+    // Create a plane called ground_mesh and apply it to a model
     Mesh ground_mesh = GenMeshPlane(100.0f, 100.0f, 1, 1); // 10x10 units, 1 subdivision
     Model ground_model = LoadModelFromMesh(ground_mesh);
 
+    // Set the ground model's material texture and shader
     SetMaterialTexture(&ground_model.materials[0], MATERIAL_MAP_DIFFUSE, ground_texture);
     ground_model.materials[0].shader = shader;
     //----------------GROUND-------------------
@@ -370,7 +344,8 @@ int main()
 
     Vector3 shotgunOffset = {weaponCamera.position.x + 0.2f, weaponCamera.position.y - 0.3f, weaponCamera.position.z - 0.4f};
 
-    int cooldown = 120;
+    int cooldown = 0;
+    int maxCooldown = 30; // Cooldown for firing the shotgun
     int ammo = 0;
     float ammoWeight = 0.3f;
     float shotgunWeight = 3.5f;
@@ -389,19 +364,28 @@ int main()
     float bobbingTime = 0.0f;
     float bobbingSpeed = 5.0f;
     float bobbingAmount = 0.1f;
-    float restY = 1.1f;
-    float restZ = 10.1f;
+    float restY = 1.1f;  // Rest position for the shotgun in Y axis
+    float restZ = 10.1f; // Rest position for the shotgun in Z axis
     float recoilOffset = 1.0f;
-    char commandPrompt[256] = {0};
+    float recoilForce = 5.0f; // Force applied to the Player when firing the shotgun
+    char commandPrompt[256 + 1] = "\0";
     float cam_rot_x = 0.0f;
     float cam_rot_y = 0.0f;
-    float moveSpeed = 0.2f;
+    float moveSpeed = 0.2f; // Player movement speed
+    float JumpForce = 5.0f; // Force applied when jumping
     float velY = 0.0f;
-    const float gravity = -9.81f; // Gravity constant
+    const float gravity = -9.81f; // Gravity Apllied to the player
     const float cam_sensitivity = 0.003f;
-    int fontSize = 10;
+    int fontSize = 12;
+    bool npcInteracting1 = false;
     float carryDistance = 2.0f;
     struct nk_context *ctx = InitNuklear(fontSize);
+
+    // Sine Wave Test
+    Vector3 cubePos = {0.0f, 0.0f, 0.0f};
+    float cubeBobbingTime = 0.0f;
+    float cubeBobbingSpeed = 10.0f;
+    float cubeBobbingAmount = 1.0f;
 
     InitAudioDevice();
     Sound fire = LoadSound("resources/sounds/shot.mp3");
@@ -416,9 +400,13 @@ int main()
     DisableCursor(); // Lock mouse at start
     PlaySound(startingVoice);
 
+    int frameCounter = 0;
+    const char message[128] = "SALAMALEIKUM KHOYA, TU VEUX JOUER A MON JEU ?";
     // printf(TextFormat("%d/%d", crosshair.width/2, crosshair.height/2));
     while (!WindowShouldClose())
     {
+        float cameraPos[3] = {camera.position.x, camera.position.y, camera.position.z};
+        SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos, SHADER_UNIFORM_VEC3);
         if (!inventory_show)
         {
             zoomControl(&camera, maxFOV, &shotgunOffset);
@@ -477,7 +465,7 @@ int main()
             }
             if (IsKeyDown(KEY_SPACE) && PlayerPos.y <= groundLevel)
             {
-                velY = 5.0f; // Jump
+                velY += JumpForce; // Jump
             }
             PlayerPos.y += velY * GetFrameTime();
         }
@@ -546,40 +534,117 @@ int main()
         {
             UpdateNuklear(ctx);
             CustomNuklearStyle(ctx);
-            if (nk_begin(ctx, "inventory", nk_rect(100, 100, 450, 450), NK_WINDOW_CLOSABLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE))
+            if (nk_begin(ctx, "inventory", nk_rect(0, 0, screenWidth / 2, screenHeight), NK_WINDOW_BORDER))
             {
-                nk_layout_row_static(ctx, 200, 190, 1);
+                nk_layout_row_static(ctx, 800, 350, 1);
 
-                if (nk_group_begin(ctx, "column1", NK_WINDOW_BORDER))
+                if (nk_group_begin(ctx, "", NK_WINDOW_BORDER))
                 {
-                    nk_layout_row_dynamic(ctx, 15, 1);
+                    nk_layout_row_static(ctx, 25, 250, 1); // 250 pixels wide instead of default
                     if (haveShotgun)
                     {
-                        nk_layout_row_dynamic(ctx, 30, 1);
-                        if (nk_button_label(ctx, "Shotgun"))
+                        nk_label(ctx, "Shotgun", NK_TEXT_LEFT);
+                        if (nk_button_label(ctx, "Equip"))
                         {
                             equipShotgun = !equipShotgun;
-                            shotgunOffset.y = 0.2f; // Adjust shotgun position when equiped
-                        }
-                        nk_label_wrap(ctx, TextFormat("Ammo: %d", ammo));
-                        nk_label_wrap(ctx, "Command Line");
-                        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, commandPrompt, sizeof(commandPrompt) - 1, nk_filter_default);
-                        if (nk_button_label(ctx, "Done"))
-                        {
-                            if (strcmp(commandPrompt, "debug") == 0)
-                            {
-                                debug = !debug;
-                            }
-                            else if (strcmp(commandPrompt, "noclip") == 0)
-                            {
-                                noclip = !noclip;
-                            }
-                            else if (strcmp(commandPrompt, "shader") == 0)
-                            {
-                                shader_active = !shader_active;
-                            }
+                            shotgunOffset.y = PlayerPos.y - 0.9f; // Adjust shotgun position when equiped
                         }
                     }
+                    else
+                    {
+                        nk_label(ctx, "No Weapon", NK_TEXT_LEFT);
+                    }
+                    nk_checkbox_label(ctx, "Disable Debug Mode", &debug);
+                    nk_label_wrap(ctx, TextFormat("Bobbing Amount (%.1f/120):", bobbingAmount));
+                    nk_slider_float(ctx, 0, &bobbingAmount, 10.0f, 0.1f);
+
+                    nk_label_wrap(ctx, TextFormat("Bobbing Speed (%.1f/10.0f):", bobbingSpeed));
+                    nk_slider_float(ctx, 0, &bobbingSpeed, 10.0f, 0.1f);
+
+                    nk_label_wrap(ctx, TextFormat("Recoil Force (%.1f/20.0):", recoilForce));
+                    nk_slider_float(ctx, 0, &recoilForce, 20.0f, 0.1f);
+
+                    nk_label_wrap(ctx, TextFormat("Speed (%.1f/50.0):", moveSpeed));
+                    nk_slider_float(ctx, 0, &moveSpeed, 50.0f, 0.1f);
+
+                    nk_label_wrap(ctx, TextFormat("Jump Force (%.1f/50.0):", JumpForce));
+                    nk_slider_float(ctx, 0, &JumpForce, 50.0f, 0.1f);
+
+                    nk_label_wrap(ctx, TextFormat("Weapon Cooldown (%d/120):", maxCooldown));
+                    nk_slider_int(ctx, 0, &maxCooldown, 120, 1);
+
+                    nk_label_wrap(ctx, TextFormat("Ammo: %d", ammo));
+                    nk_label(ctx, "Command Line", NK_TEXT_LEFT | NK_TEXT_EDIT_MODE_REPLACE);
+                    nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, commandPrompt, sizeof(commandPrompt) - 1, nk_filter_default);
+                    if (nk_button_label(ctx, "Done"))
+                    {
+                        if (strcmp(commandPrompt, "debug") == 0)
+                        {
+                            debug = !debug;
+                        }
+                        else if (strcmp(commandPrompt, "noclip") == 0)
+                        {
+                            noclip = !noclip;
+                        }
+                        else if (strcmp(commandPrompt, "shader") == 0)
+                        {
+                            shader_active = !shader_active;
+                        }
+                        else if (strcmp(commandPrompt, "ammo") == 0)
+                        {
+                            ammo += 1000;
+                        }
+                        else if (strcmp(commandPrompt, "exit") == 0)
+                        {
+                            UnloadModel(dingusMesh);
+                            UnloadModel(tableMesh);
+                            UnloadModel(pcMesh);
+                            UnloadModel(carMesh);
+                            UnloadModel(shotgunMesh);
+                            UnloadModel(ammoBoxMesh);
+                            UnloadModel(boxMesh);
+                            UnloadModel(bloodMesh);
+                            UnloadModel(npcMesh);
+                            UnloadModel(ground_model);
+
+                            UnloadTexture(dingus_tex);
+                            UnloadTexture(table_tex);
+                            UnloadTexture(pc_tex);
+                            UnloadTexture(car_tex);
+                            UnloadTexture(shotgun_tex);
+                            UnloadTexture(ammoBox_tex);
+                            UnloadTexture(box_tex);
+                            UnloadTexture(blood_tex);
+                            UnloadTexture(crosshair);
+                            UnloadTexture(particle_tex);
+                            UnloadTexture(npc_tex);
+                            UnloadTexture(ground_texture);
+                            UnloadFont(font);
+                            UnloadImage(icon);
+
+                            UnloadShader(shader);
+                            UnloadShader(shader_pix);
+                            UnloadRenderTexture(shader_tex);
+                            CloseAudioDevice();
+                            CloseWindow();
+                            return 0;
+                        }
+                        else if (strcmp(commandPrompt, "testgrav") == 0)
+                        {
+                            PlayerPos.y += 50.0f; // Reset player position to ground level
+                        }
+                        else if (strcmp(commandPrompt, "spawnpoint") == 0)
+                        {
+                            PlayerPos = (Vector3){10.5f, groundLevel, 10.5f};
+                            velY = 0.0f; // Reset velocity
+                        }
+                        else if (strcmp(commandPrompt, "help") == 0)
+                        {
+                            // Display help message
+                            printf("Available commands: debug, noclip, shader, ammo, exit, spawnpoint, help\n");
+                        }
+                    }
+
                     nk_group_end(ctx);
                 }
             }
@@ -591,11 +656,8 @@ int main()
         getScaledBoundingBox(&ammoBoxHitBox, ammoBoxMesh, ammoBoxPos, ammoBoxScale);
         getScaledBoundingBox(&boxHitBox, boxMesh, boxPos, boxScale);
         getScaledBoundingBox(&shotgunHitBox, shotgunMesh, shotgunPos, shotgunScale);
-        getScaledBoundingBox(&shotgunHitBox, shotgunMesh, shotgunPos, shotgunScale);
         getScaledBoundingBox(&NpcHitBox, npcMesh, npcPos, npcScale);
 
-        float cameraPos[3] = {camera.position.x, camera.position.y, camera.position.z};
-        SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos, SHADER_UNIFORM_VEC3);
         if (!inventory_show)
         {
             if (IsKeyPressed(KEY_L))
@@ -609,10 +671,11 @@ int main()
         RayCollision ammoCollision = GetRayCollisionBox(ray, ammoBoxHitBox);
         RayCollision shotgunCollision = GetRayCollisionBox(ray, shotgunHitBox);
         RayCollision collision = GetRayCollisionBox(ray, dingusHitBox);
+        RayCollision NpcCollision = GetRayCollisionBox(ray, NpcHitBox);
 
         if (equipShotgun && haveShotgun && !inventory_show)
         {
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && cooldown >= 120 && ammoInChamber && !haveToReload)
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && cooldown >= maxCooldown && ammoInChamber && !haveToReload)
             {
                 cooldown = 0;
                 PlaySound(fire);
@@ -621,15 +684,20 @@ int main()
                     dingusHealth--;
                 }
                 haveToReload = true;
-                shotgunOffset.z += recoilOffset; // recoil effect
+                shotgunOffset.z += recoilOffset; // recoil effect on shotgun
                 ammoInChamber = false;
+
+                // Apply recoil force
+                velY += recoilForce;                                         // Upward force
+                Vector3 backward = Vector3Scale(move_forward, -recoilForce); // Backward force
+                PlayerPos = Vector3Add(PlayerPos, backward);
             }
             else
             {
                 shotgunOffset.z += (restZ - shotgunOffset.z) * 0.1f;
             }
         }
-        if (equipShotgun && haveShotgun && haveToReload && ammo >= 1 && IsKeyPressed(KEY_R) && !ammoInChamber)
+        if (equipShotgun && haveShotgun && haveToReload && ammo >= 1 && IsKeyDown(KEY_R) && !ammoInChamber)
         {
             ammo--;
             ammoInChamber = true;
@@ -638,7 +706,7 @@ int main()
             PlaySound(reload);
         }
 
-        if (cooldown <= 119)
+        if (cooldown <= maxCooldown)
         {
             cooldown++;
         }
@@ -704,6 +772,11 @@ int main()
         DrawModelEx(boxMesh, boxPos, boxRot, 0.0f, boxScale, WHITE);
         DrawModelEx(npcMesh, npcPos, npcRot, 0.0f, npcScale, WHITE);
 
+        // TEST
+        cubeBobbingTime += GetFrameTime() * cubeBobbingSpeed;
+        cubePos.y = restY + sinf(cubeBobbingTime) * cubeBobbingAmount;
+        DrawCube(cubePos, 1.0f, 1.0f, 1.0f, RED);
+
         if (debug)
         {
             DrawBoundingBox(boxHitBox, RED);
@@ -754,25 +827,51 @@ int main()
                        (Vector2){0, 0}, WHITE);
         EndShaderMode();
 
-        // DrawTexture(crosshair, screenWidth / 2 + crosshair.width, screenHeight / 2 + crosshair.height, WHITE);
+        // NPC Interaction
+        if (NpcCollision.hit && !npcInteracting1)
+        {
+            DrawRectangle(screenWidth / 2 - 110, screenHeight / 2 - 55, 380, 25, DEBUG_BACKGROUND);
+            DrawTextEx(font, "Press E to interact with NPC", (Vector2){screenWidth / 2 - 100, screenHeight / 2 - 50}, fontSize, 1, WHITE);
+            if (IsKeyPressed(KEY_E))
+            {
+                npcInteracting1 = true;
+                frameCounter = 0; // Reset frame counter
+            }
+        }
+        else if (npcInteracting1)
+        {
+            DrawRectangle(0, screenHeight - 300, screenWidth, 300, DEBUG_BACKGROUND);
+            DrawRectangle(screenWidth / 2 - 110, screenHeight / 2 - 55, 365, 25, DEBUG_BACKGROUND);
+            DrawTextTypeWriterFX(font, message, &frameCounter, 3, screenWidth / 2 - 300, screenHeight / 2 + 200, fontSize, 1, WHITE);
+            DrawTextEx(font, "Press E to exit interaction", (Vector2){screenWidth / 2 - 100, screenHeight / 2 - 50}, fontSize, 1, WHITE);
+            if (IsKeyPressed(KEY_E) || !NpcCollision.hit)
+            {
+                npcInteracting1 = false;
+            }
+        }
+
+        // Draw Crosshair
+        DrawTexture(crosshair, screenWidth / 2 - crosshair.width / 2, screenHeight / 2 - crosshair.height / 2, WHITE);
+
+        // Draw Debug Information
         if (debug)
         {
             DrawRectangle(0, 0, 600, 150, DEBUG_BACKGROUND);
             DrawFpsEx(font, (Vector2){10, 10}, 12.0f, 1.0f);
-            DrawTextEx(font, TextFormat("Cam pos: [X: %.2f Y: %.2f Z: %.2f]", camera.position.x, camera.position.y, camera.position.z), (Vector2){10, 30}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("Cam target: [X: %.2f Y: %.2f Z: %.2f]", camera.target.x, camera.target.y, camera.target.z), (Vector2){10, 45}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("Cooldown: %d/120", cooldown), (Vector2){10, 60}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("Ammo: %d", ammo), (Vector2){10, 75}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("Current Weight: %.2f/45.0", currentWeight), (Vector2){10, 90}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("AmmoInChamber: %d", ammoInChamber), (Vector2){10, 105}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("HaveToReload: %d", haveToReload), (Vector2){10, 120}, 12, 1, WHITE);
-            DrawTextEx(font, TextFormat("Camera FOV: %.1ff", camera.fovy), (Vector2){10, 135}, 12, 1, WHITE);
+            DrawTextEx(font, TextFormat("Cam pos: [X: %.2f Y: %.2f Z: %.2f]", camera.position.x, camera.position.y, camera.position.z), (Vector2){10, 30}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("Cam target: [X: %.2f Y: %.2f Z: %.2f]", camera.target.x, camera.target.y, camera.target.z), (Vector2){10, 45}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("Cooldown: %d/%d", cooldown, maxCooldown + 1), (Vector2){10, 60}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("Ammo: %d", ammo), (Vector2){10, 75}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("Current Weight: %.2f/45.0", currentWeight), (Vector2){10, 90}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("AmmoInChamber: %d", ammoInChamber), (Vector2){10, 105}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("HaveToReload: %s", haveToReload ? "YES" : "NO"), (Vector2){10, 120}, fontSize, 1, WHITE);
+            DrawTextEx(font, TextFormat("Camera FOV: %.1ff", camera.fovy), (Vector2){10, 135}, fontSize, 1, WHITE);
             DrawTimer(font);
-            DrawTextLetterByLetter(font, "Hello, This Is A Test Game With Some Test Features.", 100, 200, 20, 2.0f, WHITE, 0.05f);
+            DrawTextEx(font, NpcCollision.hit ? "NPC HIT" : "NPC NOT HIT", (Vector2){10, 150}, fontSize, 1, WHITE);
         }
         DrawRectangle(0, screenHeight - 145, 300, 145, DEBUG_BACKGROUND);
-        DrawTextEx(font, "Controls: \n\nMove:   [Z][Q][S][D]\nPickup: [RMB]\nUse:    [E]\nReload: [R]\nZoom/Dezoom: [X]/[C]\nLights: [L]\nDebug:  [F3]", (Vector2){10, screenHeight - 135}, 12, 1, WHITE);
-        DrawRectangle((screenWidth / 2) - 1, (screenHeight / 2) - 1, 5, 5, RED);
+        DrawTextEx(font, "Controls: \n\nMove:   [Z][Q][S][D]\nPickup: [RMB]\nUse:    [E]\nReload: [R]\nZoom/Dezoom: [X]/[C]\nLights: [L]\nDebug:  [F3]", (Vector2){10, screenHeight - 135}, fontSize, 1, WHITE);
+        // DrawRectangle((screenWidth / 2) - 1, (screenHeight / 2) - 1, 5, 5, RED);
         if (inventory_show)
         {
             DrawRectangle(0, 0, screenWidth, screenHeight, DEBUG_BACKGROUND);
@@ -780,7 +879,7 @@ int main()
 
         if (ammoCollision.hit)
         {
-            DrawTextEx(font, "Press RMB to pick up", (Vector2){screenHeight - 20, 20}, 12, 1, WHITE);
+            DrawTextEx(font, "Press RMB to pick up", (Vector2){screenHeight - 20, 20}, fontSize, 1, WHITE);
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && (currentWeight + ammoWeight <= maxWeight))
             {
                 ammo++;
@@ -788,13 +887,13 @@ int main()
             }
             if (currentWeight + ammoWeight >= maxWeight)
             {
-                DrawTextEx(font, "Not Enough Space", (Vector2){screenHeight - 20, 35}, 12, 1, RED);
+                DrawTextEx(font, "Not Enough Space", (Vector2){screenHeight - 20, 35}, fontSize, 1, RED);
             }
         }
 
         if (GetRayCollisionBox(ray, boxHitBox).hit)
         {
-            DrawTextEx(font, "Press E to use", (Vector2){screenHeight - 20, 20}, 12, 1, WHITE);
+            DrawTextEx(font, "Press E to use", (Vector2){screenHeight - 20, 20}, fontSize, 1, WHITE);
             if (IsKeyPressed(KEY_E))
             {
                 boxPos.y = -1000.0f;
@@ -803,23 +902,23 @@ int main()
 
         if (shotgunCollision.hit)
         {
-            DrawTextEx(font, "Press RMB to pick up", (Vector2){screenHeight - 20, 20}, 12, 1, WHITE);
+            DrawTextEx(font, "Press RMB to pick up", (Vector2){screenHeight - 20, 20}, fontSize, 1, WHITE);
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && (currentWeight + shotgunWeight <= maxWeight))
             {
                 equipShotgun = true;
                 haveShotgun = true;
-                shotgunOffset.y = 0.2f; // Adjust shotgun position when picked up
+                shotgunOffset.y = PlayerPos.y - 0.9f; // Adjust shotgun position when picked up
                 shotgunPos.y = -1000.0f;
                 currentWeight += shotgunWeight;
             }
             if (currentWeight + shotgunWeight >= maxWeight)
             {
-                DrawTextEx(font, "Not Enough Space", (Vector2){screenHeight - 20, 35}, 12, 1, RED);
+                DrawTextEx(font, "Not Enough Space", (Vector2){screenHeight - 20, 35}, fontSize, 1, RED);
             }
         }
         else if (haveShotgun && equipShotgun && haveToReload && ammo >= 1)
         {
-            DrawTextEx(font, "R to Reload", (Vector2){screenWidth / 2 + 10.0f, screenHeight / 2 + 0.5f}, 12, 1, RED);
+            DrawTextEx(font, "R to Reload", (Vector2){screenWidth / 2 + 10.0f, screenHeight / 2 + 0.5f}, fontSize, 1, RED);
         }
 
         DrawNuklear(ctx);
